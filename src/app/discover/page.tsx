@@ -24,22 +24,18 @@ import {
   getPlanBadgeColor,
   planLabel,
 } from '@/lib/helpers';
+import { SEED_TRACKS } from '@/lib/seed-data';
 
 type Tab = 'tracks' | 'people';
-type SortKey = 'match' | 'rating' | 'recent';
 
 export default function DiscoverPage() {
-  const { currentUser, allUsers, showUpgradeModal, toast } = useApp();
+  const { currentUser, allUsers, toast } = useApp();
   const [tab, setTab] = useState<Tab>('tracks');
   const [query, setQuery] = useState('');
   const [genreFilter, setGenreFilter] = useState<string>('all');
   const [playing, setPlaying] = useState<Track | null>(null);
 
-  const tracks: Track[] = useMemo(() => {
-    // Lazy import to avoid SSR issues with seed data
-    const { SEED_TRACKS } = require('@/lib/seed-data');
-    return SEED_TRACKS as Track[];
-  }, []);
+  const tracks: Track[] = SEED_TRACKS;
 
   const visibleUsers = useMemo(
     () => allUsers.filter((u) => !u.suspended && u.id !== currentUser?.id),
