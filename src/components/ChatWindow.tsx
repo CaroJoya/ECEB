@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { onValue, ref, push, set, update, remove } from 'firebase/database';
 import { Send, Check, CheckCheck, Music } from 'lucide-react';
 import { db } from '@/lib/firebase';
+import { SEED_MESSAGES } from '@/lib/seed-data';
 import type { Conversation, Message, User } from '@/types';
 import { classNames, timeAgo } from '@/lib/helpers';
 import TypingIndicator from './TypingIndicator';
@@ -30,8 +31,12 @@ export default function ChatWindow({ conversation, currentUser, allUsers }: Prop
 
   // Subscribe to messages
   useEffect(() => {
-    if (!db || !conversation) {
+    if (!conversation) {
       setMessages([]);
+      return;
+    }
+    if (!db) {
+      setMessages(SEED_MESSAGES[conversation.id] || []);
       return;
     }
     const database = db;
@@ -43,7 +48,7 @@ export default function ChatWindow({ conversation, currentUser, allUsers }: Prop
         arr.sort((a, b) => a.createdAt - b.createdAt);
         setMessages(arr);
       } else {
-        setMessages([]);
+        setMessages(SEED_MESSAGES[conversation.id] || []);
       }
     });
     return () => unsub();
@@ -118,7 +123,22 @@ export default function ChatWindow({ conversation, currentUser, allUsers }: Prop
   }
 
   async function sendMessage() {
-    if (!db || !conversation || !text.trim()) return;
+    if (!conversation || !text.trim()) return;
+
+    // Offline / no-Firebase fallback: just append locally
+    if (!db) {
+      const localMsg: Message = {
+        id: `msg_${Date.now()}`,
+        from: currentUser.id,
+        text: text.trim(),
+        createdAt: Date.now(),
+        read: false,
+      };
+      setMessages((prev) => [...prev, localMsg]);
+      setText('');
+      return;
+    }
+
     const database = db;
 
     const msgId = push(ref(database, `messages/${conversation.id}`)).key;
