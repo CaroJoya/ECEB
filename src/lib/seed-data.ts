@@ -532,32 +532,35 @@ export const SEED_CONVERSATIONS: Conversation[] = convoDefs.map((c, i) => ({
   updatedAt: now - (i + 1) * 3600000,
 }));
 
-export const SEED_MESSAGES: Record<string, Message[]> = {};
+export const SEED_MESSAGES: Record<string, Record<string, Message>> = {};
 convoDefs.forEach((c, i) => {
   const convoId = `convo_${String(i + 1).padStart(2, '0')}`;
-  SEED_MESSAGES[convoId] = [
-    {
-      id: `${convoId}_msg_01`,
+  const m1 = `${convoId}_msg_01`;
+  const m2 = `${convoId}_msg_02`;
+  const m3 = `${convoId}_msg_03`;
+  SEED_MESSAGES[convoId] = {
+    [m1]: {
+      id: m1,
       from: c[0],
       text: 'Hey! How are you?',
       createdAt: now - (i + 1) * 7200000,
       read: true,
     },
-    {
-      id: `${convoId}_msg_02`,
+    [m2]: {
+      id: m2,
       from: c[1],
       text: 'Doing great! Working on something new.',
       createdAt: now - (i + 1) * 5400000,
       read: true,
     },
-    {
-      id: `${convoId}_msg_03`,
+    [m3]: {
+      id: m3,
       from: c[0],
       text: c[2],
       createdAt: now - (i + 1) * 3600000,
       read: i % 2 === 0,
     },
-  ];
+  };
 });
 
 export const SEED_NOTIFICATIONS: Record<string, AppNotification[]> = {

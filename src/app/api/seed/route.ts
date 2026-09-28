@@ -82,7 +82,9 @@ async function handleSeed() {
     });
     await set(ref(db, 'conversations'), convosMap);
 
-    await set(ref(db, 'messages'), SEED_MESSAGES);
+    for (const convoId of Object.keys(SEED_MESSAGES)) {
+      await set(ref(db, `messages/${convoId}`), SEED_MESSAGES[convoId]);
+    }
 
     await set(ref(db, 'notifications'), SEED_NOTIFICATIONS);
 

@@ -14,15 +14,19 @@ const PROTECTED = [
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
-  const needsAuth = PROTECTED.some((p) => pathname.startsWith(p));
+  const needsAuth = PROTECTED.some(
+    (p) => pathname === p || pathname.startsWith(p + '/')
+  );
   if (!needsAuth) {
     return NextResponse.next();
   }
 
   const userId = request.cookies.get('currentUserId')?.value;
-
   if (!userId) {
-    return NextResponse.next();
+    const url = request.nextUrl.clone();
+    url.pathname = '/login';
+    url.searchParams.set('next', pathname);
+    return NextResponse.redirect(url);
   }
 
   return NextResponse.next();

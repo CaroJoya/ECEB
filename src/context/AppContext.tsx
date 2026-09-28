@@ -6,6 +6,7 @@ import React, {
   useEffect,
   useState,
   useCallback,
+  useMemo,
   ReactNode,
 } from 'react';
 import { onValue, ref } from 'firebase/database';
@@ -42,7 +43,7 @@ interface AppContextValue {
 const AppContext = createContext<AppContextValue | undefined>(undefined);
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [currentUserId, setCurrentUserIdState] = useState<string | null>(null);
   const [allUsers, setAllUsers] = useState<User[]>(SEED_USERS);
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,62 +53,97 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [paymentPlan, setPaymentPlan] = useState<PlanKey | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
+  // ---- Restore persisted user on mount ----
   useEffect(() => {
     const stored = getCurrentUserId();
     if (stored) {
-      const fallback = SEED_USERS.find((u) => u.id === stored) || null;
-      setCurrentUser(fallback);
+      setCurrentUserIdState(stored);
     }
     setLoading(false);
   }, []);
 
+  // ---- Subscribe to users list (Firebase or seed fallback) ----
   useEffect(() => {
-    if (!db) return;
+    if (!db) {
+      setAllUsers(SEED_USERS);
+      return;
+    }
     const usersRef = ref(db, 'users');
-    const unsub = onValue(usersRef, (snap) => {
-      const val = snap.val();
-      if (val && typeof val === 'object') {
-        const arr = Object.values(val) as User[];
-        setAllUsers(arr.length ? arr : SEED_USERS);
-      } else {
+    const unsub = onValue(
+      usersRef,
+      (snap) => {
+        const val = snap.val();
+        if (val && typeof val === 'object') {
+          const arr = Object.values(val) as User[];
+          setAllUsers(arr.length ? arr : SEED_USERS);
+        } else {
+          setAllUsers(SEED_USERS);
+        }
+      },
+      (err) => {
+        console.warn('[AppContext] users subscription error', err);
         setAllUsers(SEED_USERS);
       }
-    });
+    );
     return () => unsub();
   }, []);
 
+  // ---- Subscribe to current user's notifications ----
   useEffect(() => {
-    if (!db || !currentUser) {
+    if (!currentUserId) {
       setNotifications([]);
       return;
     }
-    const notifRef = ref(db, `notifications/${currentUser.id}`);
-    const unsub = onValue(notifRef, (snap) => {
-      const val = snap.val();
-      if (val && typeof val === 'object') {
-        setNotifications(Object.values(val) as AppNotification[]);
-      } else {
-        setNotifications(SEED_NOTIFICATIONS[currentUser.id] || []);
+    if (!db) {
+      setNotifications(SEED_NOTIFICATIONS[currentUserId] || []);
+      return;
+    }
+    const notifRef = ref(db, `notifications/${currentUserId}`);
+    const unsub = onValue(
+      notifRef,
+      (snap) => {
+        const val = snap.val();
+        if (val && typeof val === 'object') {
+          const arr = Object.values(val) as AppNotification[];
+          arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+          setNotifications(arr);
+        } else {
+          setNotifications(SEED_NOTIFICATIONS[currentUserId] || []);
+        }
+      },
+      (err) => {
+        console.warn('[AppContext] notifications subscription error', err);
+        setNotifications(SEED_NOTIFICATIONS[currentUserId] || []);
       }
-    });
+    );
     return () => unsub();
-  }, [currentUser]);
+  }, [currentUserId]);
+
+  // ---- Derive currentUser from id + live users list ----
+  // This makes plan upgrades, suspensions, and profile edits reflect instantly.
+  const currentUser = useMemo<User | null>(() => {
+    if (!currentUserId) return null;
+    return (
+      allUsers.find((u) => u.id === currentUserId) ||
+      SEED_USERS.find((u) => u.id === currentUserId) ||
+      null
+    );
+  }, [currentUserId, allUsers]);
 
   const login = useCallback((userId: string) => {
     setCurrentUserId(userId);
-    const u = SEED_USERS.find((x) => x.id === userId) || null;
-    setCurrentUser(u);
+    setCurrentUserIdState(userId);
   }, []);
 
   const logout = useCallback(() => {
     clearCurrentUserId();
-    setCurrentUser(null);
+    setCurrentUserIdState(null);
+    setNotifications([]);
   }, []);
 
   const switchUser = useCallback((userId: string) => {
     setCurrentUserId(userId);
-    const u = SEED_USERS.find((x) => x.id === userId) || null;
-    setCurrentUser(u);
+    setCurrentUserIdState(userId);
   }, []);
 
   const showUpgradeModal = useCallback((feature?: string) => {
@@ -131,14 +167,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const toast = useCallback((message: string, type: ToastType = 'info') => {
-    const id = `${Date.now()}-${Math.random()}`;
+    const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     setToasts((prev) => [...prev, { id, message, type }]);
     setTimeout(() => {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 3500);
   }, []);
 
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = useMemo(
+    () => notifications.filter((n) => !n.read).length,
+    [notifications]
+  );
 
   const value: AppContextValue = {
     currentUser,

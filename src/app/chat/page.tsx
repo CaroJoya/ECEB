@@ -12,44 +12,64 @@ import { SEED_CONVERSATIONS } from '@/lib/seed-data';
 
 export default function ChatPage() {
   const { currentUser, allUsers } = useApp();
-  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [remoteConversations, setRemoteConversations] = useState<
+    Conversation[] | null
+  >(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [query, setQuery] = useState('');
 
+  // Subscribe to Firebase conversations (if available)
   useEffect(() => {
     if (!db) {
-      setConversations(SEED_CONVERSATIONS);
+      setRemoteConversations(null);
       return;
     }
     const convRef = ref(db, 'conversations');
-    const unsub = onValue(convRef, (snap) => {
-      const val = snap.val();
-      if (val && typeof val === 'object') {
-        setConversations(Object.values(val) as Conversation[]);
-      } else {
-        setConversations(SEED_CONVERSATIONS);
+    const unsub = onValue(
+      convRef,
+      (snap) => {
+        const val = snap.val();
+        if (val && typeof val === 'object') {
+          setRemoteConversations(Object.values(val) as Conversation[]);
+        } else {
+          setRemoteConversations([]);
+        }
+      },
+      (err) => {
+        console.warn('[chat] conversations subscription error', err);
+        setRemoteConversations([]);
       }
-    });
+    );
     return () => unsub();
   }, []);
+
+  // Merge: prefer Firebase data if it has anything; else seed.
+  const conversations = useMemo<Conversation[]>(() => {
+    if (remoteConversations && remoteConversations.length > 0) {
+      return remoteConversations;
+    }
+    return SEED_CONVERSATIONS;
+  }, [remoteConversations]);
 
   const myConversations = useMemo(() => {
     if (!currentUser) return [];
     return conversations
-      .filter((c) => c.participants?.[currentUser.id])
+      .filter((c) => c.participants && c.participants[currentUser.id])
       .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   }, [conversations, currentUser]);
 
   const filtered = useMemo(() => {
+    if (!currentUser) return myConversations;
     if (!query) return myConversations;
+    const q = query.toLowerCase();
     return myConversations.filter((c) => {
       const otherId = Object.keys(c.participants).find(
-        (id) => id !== currentUser?.id
+        (id) => id !== currentUser.id
       );
       const other = allUsers.find((u) => u.id === otherId);
       return (
-        other?.name.toLowerCase().includes(query.toLowerCase()) ||
-        c.lastMessage?.toLowerCase().includes(query.toLowerCase())
+        (other?.name.toLowerCase().includes(q) ?? false) ||
+        (c.lastMessage?.toLowerCase().includes(q) ?? false)
       );
     });
   }, [myConversations, query, allUsers, currentUser]);
@@ -77,8 +97,8 @@ export default function ChatPage() {
         {/* Sidebar list */}
         <div
           className={classNames(
-            'w-full sm:w-80 flex-shrink-0 bg-base-850 border border-base-700 rounded-xl overflow-hidden flex flex-col',
-            selected && 'hidden sm:flex'
+            'w-full sm:w-80 flex-shrink-0 bg-base-850 border border-base-700 rounded-xl overflow-hidden flex-col',
+            selected ? 'hidden sm:flex' : 'flex'
           )}
         >
           <div className="p-3 border-b border-base-700">
@@ -115,7 +135,10 @@ export default function ChatPage() {
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={other?.avatar || 'https://ui-avatars.com/api/?name=U'}
+                    src={
+                      other?.avatar ||
+                      'https://ui-avatars.com/api/?name=U&background=1DB954&color=fff'
+                    }
                     alt={other?.name || 'User'}
                     className="w-10 h-10 rounded-full border border-base-700 flex-shrink-0"
                   />
@@ -142,7 +165,7 @@ export default function ChatPage() {
         <div
           className={classNames(
             'flex-1 min-w-0',
-            !selected && 'hidden sm:flex'
+            selected ? 'flex' : 'hidden sm:flex'
           )}
         >
           <div className="w-full flex flex-col">

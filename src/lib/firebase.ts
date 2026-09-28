@@ -13,7 +13,9 @@ const firebaseConfig = {
 };
 
 const hasConfig = Boolean(
-  firebaseConfig.apiKey && firebaseConfig.databaseURL && firebaseConfig.projectId
+  firebaseConfig.apiKey &&
+    firebaseConfig.databaseURL &&
+    firebaseConfig.projectId
 );
 
 let app: FirebaseApp | null = null;
@@ -21,15 +23,24 @@ let db: Database | null = null;
 let storage: FirebaseStorage | null = null;
 
 if (hasConfig) {
-  app = getApps().length ? getApp() : initializeApp(firebaseConfig);
-  db = getDatabase(app);
-  storage = getStorage(app);
+  try {
+    app = getApps().length ? getApp() : initializeApp(firebaseConfig);
+    db = getDatabase(app);
+    storage = getStorage(app);
+  } catch (err) {
+    console.error('[Firebase] Initialization failed, falling back to demo mode', err);
+    app = null;
+    db = null;
+    storage = null;
+  }
 } else {
   if (typeof window === 'undefined') {
     console.warn(
-      '[Firebase] Missing env vars. Set NEXT_PUBLIC_FIREBASE_* in .env.local'
+      '[Firebase] Missing env vars. Set NEXT_PUBLIC_FIREBASE_* in .env.local. Running in local demo mode.'
     );
   }
 }
+
+export const isFirebaseReady = Boolean(db);
 
 export { app, db, storage };
