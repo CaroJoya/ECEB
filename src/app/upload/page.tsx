@@ -8,18 +8,44 @@ import {
   Loader2,
   Lock,
   IndianRupee,
+  FileAudio,
+  X,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { LICENSE_TYPES } from '@/lib/config';
-import { ref as dbRef, push, set } from 'firebase/database';
-import {
-  ref as storageRef,
-  uploadBytes,
-  getDownloadURL,
-} from 'firebase/storage';
-import { db, storage } from '@/lib/firebase';
+import { ref as dbRef, set } from 'firebase/database';
+import { db } from '@/lib/firebase';
 import type { LicenseKey, Track } from '@/types';
 import { classNames, canUpload } from '@/lib/helpers';
+
+const ACCEPTED_MIME_PREFIX = 'audio/';
+const ACCEPTED_EXTENSIONS = [
+  '.mp3',
+  '.wav',
+  '.ogg',
+  '.m4a',
+  '.aac',
+  '.flac',
+  '.webm',
+];
+
+function isAudioFile(file: File): boolean {
+  if (file.type && file.type.startsWith(ACCEPTED_MIME_PREFIX)) return true;
+  const name = file.name.toLowerCase();
+  return ACCEPTED_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
+
+function stripExtension(name: string): string {
+  const dot = name.lastIndexOf('.');
+  return dot > 0 ? name.slice(0, dot) : name;
+}
+
+function formatSize(bytes: number): string {
+  if (!bytes) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export default function UploadPage() {
   const router = useRouter();
@@ -63,6 +89,23 @@ export default function UploadPage() {
     );
   }
 
+  function handlePickFile(picked: File | null) {
+    if (!picked) {
+      setFile(null);
+      return;
+    }
+    if (!isAudioFile(picked)) {
+      toast('Please pick a valid audio file', 'error');
+      setFile(null);
+      return;
+    }
+    setFile(picked);
+    // Auto-fill title from filename if empty
+    if (!title.trim()) {
+      setTitle(stripExtension(picked.name));
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!currentUser) return;
@@ -74,28 +117,24 @@ export default function UploadPage() {
       toast('Pick an audio file', 'error');
       return;
     }
+    if (!isAudioFile(file)) {
+      toast('That file is not a valid audio file', 'error');
+      return;
+    }
 
     setUploading(true);
-    let url = `https://picsum.photos/seed/${encodeURIComponent(title)}/800/800`;
-
-    try {
-      if (storage) {
-        const path = `tracks/${currentUser.id}/${Date.now()}-${file.name}`;
-        const sRef = storageRef(storage, path);
-        await uploadBytes(sRef, file);
-        url = await getDownloadURL(sRef);
-      }
-    } catch (err) {
-      console.warn('[upload] storage fallback', err);
-    }
 
     const trackId = `track_${Date.now()}`;
     const newTrack: Track = {
       id: trackId,
       userId: currentUser.id,
       title: title.trim(),
-      url,
-      coverUrl: `https://picsum.photos/seed/${encodeURIComponent(title)}-cover/400/400`,
+      // No real audio URL — this is a metadata-only track on the Spark plan.
+      // Empty string so the player silently no-ops instead of 404ing.
+      url: '',
+      coverUrl: `https://picsum.photos/seed/${encodeURIComponent(
+        title.trim()
+      )}-cover/400/400`,
       plays: 0,
       genre,
       bpm,
@@ -105,6 +144,9 @@ export default function UploadPage() {
       createdAt: Date.now(),
     };
 
+    // Small delay so the "Uploading..." spinner feels real.
+    await new Promise((r) => setTimeout(r, 900));
+
     try {
       if (db) {
         await set(dbRef(db, `tracks/${trackId}`), newTrack);
@@ -113,7 +155,7 @@ export default function UploadPage() {
       setUploading(false);
       router.push('/dashboard');
     } catch (err) {
-      console.error(err);
+      console.error('[upload] metadata save failed', err);
       toast('Upload failed', 'error');
       setUploading(false);
     }
@@ -148,11 +190,18 @@ export default function UploadPage() {
               onChange={(e) => setGenre(e.target.value)}
               className="w-full bg-base-800 border border-base-700 rounded-lg px-3 py-2 text-white focus:border-accent outline-none"
             >
-              {['Lo-fi', 'Pop', 'Hip-hop', 'Rock', 'Indie', 'Electronic', 'R&B', 'Ambient'].map(
-                (g) => (
-                  <option key={g}>{g}</option>
-                )
-              )}
+              {[
+                'Lo-fi',
+                'Pop',
+                'Hip-hop',
+                'Rock',
+                'Indie',
+                'Electronic',
+                'R&B',
+                'Ambient',
+              ].map((g) => (
+                <option key={g}>{g}</option>
+              ))}
             </select>
           </div>
           <div>
@@ -204,7 +253,9 @@ export default function UploadPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1.5">Description</label>
+          <label className="block text-sm font-medium mb-1.5">
+            Description
+          </label>
           <textarea
             value={description}
             onChange={(e) => setDescription(e.target.value)}
@@ -215,19 +266,46 @@ export default function UploadPage() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1.5">Audio file</label>
-          <label className="flex items-center justify-center gap-3 bg-base-800 hover:bg-base-750 border border-dashed border-base-600 rounded-lg py-6 cursor-pointer transition">
-            <Music className="w-5 h-5 text-gray-500" />
-            <span className="text-sm text-gray-400">
-              {file ? file.name : 'Click to choose an audio file'}
-            </span>
-            <input
-              type="file"
-              accept="audio/*"
-              onChange={(e) => setFile(e.target.files?.[0] || null)}
-              className="hidden"
-            />
+          <label className="block text-sm font-medium mb-1.5">
+            Audio file
           </label>
+
+          {!file ? (
+            <label className="flex items-center justify-center gap-3 bg-base-800 hover:bg-base-750 border border-dashed border-base-600 rounded-lg py-6 cursor-pointer transition">
+              <Music className="w-5 h-5 text-gray-500" />
+              <span className="text-sm text-gray-400">
+                Click to choose an audio file
+              </span>
+              <input
+                type="file"
+                accept="audio/*,.mp3,.wav,.ogg,.m4a,.aac,.flac,.webm"
+                onChange={(e) =>
+                  handlePickFile(e.target.files?.[0] || null)
+                }
+                className="hidden"
+              />
+            </label>
+          ) : (
+            <div className="flex items-center gap-3 bg-base-800 border border-accent/40 rounded-lg px-3 py-3">
+              <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/30 flex items-center justify-center flex-shrink-0">
+                <FileAudio className="w-5 h-5 text-accent" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{file.name}</p>
+                <p className="text-[11px] text-gray-500">
+                  {file.type || 'audio'} • {formatSize(file.size)}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFile(null)}
+                className="p-1.5 rounded-lg hover:bg-base-700 transition"
+                aria-label="Remove file"
+              >
+                <X className="w-4 h-4 text-gray-400" />
+              </button>
+            </div>
+          )}
         </div>
 
         <button
