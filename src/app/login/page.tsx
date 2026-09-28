@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Music, AlertCircle } from 'lucide-react';
 import FakeGoogleModal from '@/components/FakeGoogleModal';
@@ -9,7 +9,15 @@ import { db } from '@/lib/firebase';
 import { ref, update, serverTimestamp } from 'firebase/database';
 import type { User } from '@/types';
 
-export default function LoginPage() {
+function LoginFallback() {
+  return (
+    <div className="min-h-screen bg-base-900 flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
+
+function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login, toast, currentUser, loading } = useApp();
@@ -20,7 +28,7 @@ export default function LoginPage() {
 
   const nextPath = searchParams.get('next') || '/dashboard';
 
-  // Safety net: already signed in? Go to next or discover.
+  // Safety net: already signed in? Go to next or dashboard.
   useEffect(() => {
     if (!loading && currentUser) {
       router.replace(nextPath);
@@ -58,11 +66,7 @@ export default function LoginPage() {
   }
 
   if (loading || currentUser) {
-    return (
-      <div className="min-h-screen bg-base-900 flex items-center justify-center">
-        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    return <LoginFallback />;
   }
 
   return (
@@ -214,5 +218,13 @@ export default function LoginPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<LoginFallback />}>
+      <LoginContent />
+    </Suspense>
   );
 }
