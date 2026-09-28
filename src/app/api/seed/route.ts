@@ -86,7 +86,13 @@ async function handleSeed() {
       await set(ref(db, `messages/${convoId}`), SEED_MESSAGES[convoId]);
     }
 
-    await set(ref(db, 'notifications'), SEED_NOTIFICATIONS);
+    // Write notifications per-user, keyed by notification id (not as arrays).
+for (const userId of Object.keys(SEED_NOTIFICATIONS)) {
+  await set(
+    ref(db, `notifications/${userId}`),
+    SEED_NOTIFICATIONS[userId]
+  );
+}
 
     await set(ref(db, 'subscriptions'), SEED_SUBSCRIPTIONS);
 

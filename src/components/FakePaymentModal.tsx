@@ -12,7 +12,7 @@ import { formatPrice, classNames } from '@/lib/helpers';
 type Stage = 'review' | 'processing' | 'done';
 
 export default function FakePaymentModal() {
-  const { isPaymentOpen, paymentPlan, hidePaymentModal, currentUser, toast } = useApp();
+  const { isPaymentOpen, paymentPlan, hidePaymentModal, currentUser, toast , addNotification } = useApp();
   const [stage, setStage] = useState<Stage>('review');
 
   if (!isPaymentOpen || !paymentPlan || !currentUser) return null;
@@ -29,37 +29,35 @@ export default function FakePaymentModal() {
   }
 
   async function confirm() {
-    setStage('processing');
-    setTimeout(async () => {
-      try {
-        if (db) {
-          await update(ref(db, `users/${currentUser!.id}`), {
-            plan: paymentPlan,
-          });
-          await update(ref(db, `subscriptions/${currentUser!.id}`), {
-            plan: paymentPlan,
-            startDate: Date.now(),
-            endDate: Date.now() + 365 * 86400000,
-          });
-          const notifId = `notif_${Date.now()}`;
-          await update(ref(db, `notifications/${currentUser!.id}/${notifId}`), {
-            id: notifId,
-            type: 'payment',
-            title: 'Plan upgraded',
-            message: `You're now on ${plan.label} 🎉`,
-            read: false,
-            createdAt: Date.now(),
-          });
-        }
-        setStage('done');
-        toast(`Upgraded to ${plan.label} 🎉`, 'success');
-      } catch (e) {
-        console.warn('[payment]', e);
-        toast('Something went wrong', 'error');
-        setStage('review');
+  setStage('processing');
+  setTimeout(async () => {
+    try {
+      if (db) {
+        await update(ref(db, `users/${currentUser!.id}`), {
+          plan: paymentPlan,
+        });
+        await update(ref(db, `subscriptions/${currentUser!.id}`), {
+          plan: paymentPlan,
+          startDate: Date.now(),
+          endDate: Date.now() + 365 * 86400000,
+        });
       }
-    }, 1500);
-  }
+      await addNotification({
+        id: `notif_${Date.now()}`,
+        type: 'payment',
+        title: 'Plan upgraded',
+        message: `You're now on ${plan.label} 🎉`,
+        link: '/dashboard',
+      });
+      setStage('done');
+      toast(`Upgraded to ${plan.label} 🎉`, 'success');
+    } catch (e) {
+      console.warn('[payment]', e);
+      toast('Something went wrong', 'error');
+      setStage('review');
+    }
+  }, 1500);
+}
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">

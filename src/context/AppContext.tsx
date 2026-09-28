@@ -9,7 +9,13 @@ import React, {
   useMemo,
   ReactNode,
 } from 'react';
-import { onValue, ref } from 'firebase/database';
+import {
+  onValue,
+  ref,
+  update,
+  remove,
+  set,
+} from 'firebase/database';
 import { db } from '@/lib/firebase';
 import { SEED_USERS, SEED_NOTIFICATIONS } from '@/lib/seed-data';
 import {
@@ -17,7 +23,13 @@ import {
   setCurrentUserId,
   clearCurrentUserId,
 } from '@/lib/fake-auth';
-import type { User, AppNotification, PlanKey, Toast, ToastType } from '@/types';
+import type {
+  User,
+  AppNotification,
+  PlanKey,
+  Toast,
+  ToastType,
+} from '@/types';
 
 interface AppContextValue {
   currentUser: User | null;
@@ -38,6 +50,15 @@ interface AppContextValue {
   isPaymentOpen: boolean;
   toasts: Toast[];
   toast: (message: string, type?: ToastType) => void;
+  markNotificationRead: (id: string) => Promise<void>;
+  markAllNotificationsRead: () => Promise<void>;
+  clearNotifications: () => Promise<void>;
+  addNotification: (
+    notif: Omit<AppNotification, 'createdAt' | 'read'> & {
+      createdAt?: number;
+      read?: boolean;
+    }
+  ) => Promise<void>;
 }
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
@@ -95,7 +116,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     if (!db) {
-      setNotifications(SEED_NOTIFICATIONS[currentUserId] || []);
+      const seed = SEED_NOTIFICATIONS[currentUserId];
+      setNotifications(seed ? Object.values(seed) : []);
       return;
     }
     const notifRef = ref(db, `notifications/${currentUserId}`);
@@ -108,19 +130,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
           arr.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
           setNotifications(arr);
         } else {
-          setNotifications(SEED_NOTIFICATIONS[currentUserId] || []);
+          const seed = SEED_NOTIFICATIONS[currentUserId];
+          setNotifications(seed ? Object.values(seed) : []);
         }
       },
       (err) => {
         console.warn('[AppContext] notifications subscription error', err);
-        setNotifications(SEED_NOTIFICATIONS[currentUserId] || []);
+        const seed = SEED_NOTIFICATIONS[currentUserId];
+        setNotifications(seed ? Object.values(seed) : []);
       }
     );
     return () => unsub();
   }, [currentUserId]);
 
   // ---- Derive currentUser from id + live users list ----
-  // This makes plan upgrades, suspensions, and profile edits reflect instantly.
   const currentUser = useMemo<User | null>(() => {
     if (!currentUserId) return null;
     return (
@@ -174,6 +197,96 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }, 3500);
   }, []);
 
+  // ---- Notification actions ----
+
+  const markNotificationRead = useCallback(
+    async (id: string) => {
+      if (!currentUserId) return;
+
+      // Optimistic update
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, read: true } : n))
+      );
+
+      if (!db) return;
+      try {
+        await update(
+          ref(db, `notifications/${currentUserId}/${id}`),
+          { read: true }
+        );
+      } catch (e) {
+        console.warn('[AppContext] markNotificationRead failed', e);
+      }
+    },
+    [currentUserId]
+  );
+
+  const markAllNotificationsRead = useCallback(async () => {
+    if (!currentUserId) return;
+
+    // Optimistic update
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+
+    if (!db) return;
+    try {
+      const updates: Record<string, boolean> = {};
+      notifications.forEach((n) => {
+        if (!n.read) updates[`${n.id}/read`] = true;
+      });
+      if (Object.keys(updates).length) {
+        await update(
+          ref(db, `notifications/${currentUserId}`),
+          updates
+        );
+      }
+    } catch (e) {
+      console.warn('[AppContext] markAllNotificationsRead failed', e);
+    }
+  }, [currentUserId, notifications]);
+
+  const clearNotifications = useCallback(async () => {
+    if (!currentUserId) return;
+
+    // Optimistic update
+    setNotifications([]);
+
+    if (!db) return;
+    try {
+      await remove(ref(db, `notifications/${currentUserId}`));
+    } catch (e) {
+      console.warn('[AppContext] clearNotifications failed', e);
+    }
+  }, [currentUserId]);
+
+  const addNotification = useCallback(
+    async (
+      notif: Omit<AppNotification, 'createdAt' | 'read'> & {
+        createdAt?: number;
+        read?: boolean;
+      }
+    ) => {
+      if (!currentUserId) return;
+      const full: AppNotification = {
+        ...notif,
+        read: notif.read ?? false,
+        createdAt: notif.createdAt ?? Date.now(),
+      };
+      if (!db) {
+        setNotifications((prev) => [full, ...prev]);
+        return;
+      }
+      try {
+        await set(
+          ref(db, `notifications/${currentUserId}/${full.id}`),
+          full
+        );
+      } catch (e) {
+        console.warn('[AppContext] addNotification failed', e);
+      }
+    },
+    [currentUserId]
+  );
+
   const unreadCount = useMemo(
     () => notifications.filter((n) => !n.read).length,
     [notifications]
@@ -198,6 +311,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     isPaymentOpen,
     toasts,
     toast,
+    markNotificationRead,
+    markAllNotificationsRead,
+    clearNotifications,
+    addNotification,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

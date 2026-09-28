@@ -563,9 +563,12 @@ convoDefs.forEach((c, i) => {
   };
 });
 
-export const SEED_NOTIFICATIONS: Record<string, AppNotification[]> = {
-  user_01: [
-    {
+export const SEED_NOTIFICATIONS: Record<
+  string,
+  Record<string, AppNotification>
+> = {
+  user_01: {
+    notif_01: {
       id: 'notif_01',
       type: 'message',
       title: 'New message from Priya',
@@ -574,7 +577,7 @@ export const SEED_NOTIFICATIONS: Record<string, AppNotification[]> = {
       read: false,
       createdAt: now - 3600000,
     },
-    {
+    notif_02: {
       id: 'notif_02',
       type: 'collab',
       title: 'Collab request',
@@ -583,7 +586,7 @@ export const SEED_NOTIFICATIONS: Record<string, AppNotification[]> = {
       read: false,
       createdAt: now - 7200000,
     },
-    {
+    notif_03: {
       id: 'notif_03',
       type: 'review',
       title: 'New 5★ review',
@@ -592,9 +595,9 @@ export const SEED_NOTIFICATIONS: Record<string, AppNotification[]> = {
       read: true,
       createdAt: now - 86400000,
     },
-  ],
-  user_02: [
-    {
+  },
+  user_02: {
+    notif_04: {
       id: 'notif_04',
       type: 'payment',
       title: 'Payment received',
@@ -603,7 +606,7 @@ export const SEED_NOTIFICATIONS: Record<string, AppNotification[]> = {
       read: false,
       createdAt: now - 1800000,
     },
-    {
+    notif_05: {
       id: 'notif_05',
       type: 'message',
       title: 'New message from Aarav',
@@ -612,9 +615,9 @@ export const SEED_NOTIFICATIONS: Record<string, AppNotification[]> = {
       read: false,
       createdAt: now - 3600000,
     },
-  ],
-  user_09: [
-    {
+  },
+  user_09: {
+    notif_06: {
       id: 'notif_06',
       type: 'collab',
       title: 'Collab accepted',
@@ -623,8 +626,9 @@ export const SEED_NOTIFICATIONS: Record<string, AppNotification[]> = {
       read: false,
       createdAt: now - 5400000,
     },
-  ],
+  },
 };
+
 
 export const SEED_SUBSCRIPTIONS: Record<string, { plan: PlanKey; startDate: number; endDate: number }> = {
   user_02: { plan: 'pro', startDate: now - 30 * day, endDate: now + 335 * day },
