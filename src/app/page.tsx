@@ -1,6 +1,8 @@
 'use client';
 
 import Link from 'next/link';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Music,
   Users,
@@ -16,7 +18,24 @@ import {
 import { useApp } from '@/context/AppContext';
 
 export default function HomePage() {
-  const { currentUser } = useApp();
+  const { currentUser, loading } = useApp();
+  const router = useRouter();
+
+  // Safety net: if middleware was bypassed (e.g. cookie missing but
+  // localStorage present), bounce signed-in users to /discover.
+  useEffect(() => {
+    if (!loading && currentUser) {
+      router.replace('/discover');
+    }
+  }, [currentUser, loading, router]);
+
+  if (loading || currentUser) {
+    return (
+      <div className="min-h-screen bg-base-900 flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   const features = [
     {
@@ -69,10 +88,10 @@ export default function HomePage() {
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center">
             <Link
-              href={currentUser ? '/discover' : '/login'}
+              href="/login"
               className="inline-flex items-center justify-center gap-2 bg-accent hover:bg-accent-light text-black font-semibold px-6 py-3 rounded-lg transition"
             >
-              {currentUser ? 'Go to Discover' : 'Get Started'}
+              Get Started
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
@@ -116,11 +135,11 @@ export default function HomePage() {
             getting paid.
           </p>
           <Link
-            href={currentUser ? '/upload' : '/login'}
+            href="/login"
             className="inline-flex items-center gap-2 bg-accent hover:bg-accent-light text-black font-semibold px-6 py-3 rounded-lg transition"
           >
             <Play className="w-4 h-4" />
-            {currentUser ? 'Upload a Track' : 'Sign In'}
+            Sign In
           </Link>
         </div>
       </section>

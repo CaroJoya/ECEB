@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Music, AlertCircle } from 'lucide-react';
 import FakeGoogleModal from '@/components/FakeGoogleModal';
 import { useApp } from '@/context/AppContext';
@@ -11,11 +11,21 @@ import type { User } from '@/types';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, toast } = useApp();
+  const searchParams = useSearchParams();
+  const { login, toast, currentUser, loading } = useApp();
   const [googleOpen, setGoogleOpen] = useState(false);
   const [legalOpen, setLegalOpen] = useState(false);
   const [pendingUser, setPendingUser] = useState<User | null>(null);
   const [agreed, setAgreed] = useState(false);
+
+  const nextPath = searchParams.get('next') || '/dashboard';
+
+  // Safety net: already signed in? Go to next or discover.
+  useEffect(() => {
+    if (!loading && currentUser) {
+      router.replace(nextPath);
+    }
+  }, [currentUser, loading, router, nextPath]);
 
   function handlePicked(user: User) {
     setGoogleOpen(false);
@@ -25,7 +35,7 @@ export default function LoginPage() {
       setPendingUser(user);
       setLegalOpen(true);
     } else {
-      router.push('/dashboard');
+      router.push(nextPath);
     }
   }
 
@@ -44,7 +54,15 @@ export default function LoginPage() {
     }
     toast('Welcome to Music Creator Platform 🎉', 'success');
     setLegalOpen(false);
-    router.push('/dashboard');
+    router.push(nextPath);
+  }
+
+  if (loading || currentUser) {
+    return (
+      <div className="min-h-screen bg-base-900 flex items-center justify-center">
+        <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
 
   return (
@@ -179,7 +197,7 @@ export default function LoginPage() {
 
             <div className="p-4 border-t border-base-700 flex justify-end gap-2">
               <button
-                onClick={() => router.push('/dashboard')}
+                onClick={() => router.push(nextPath)}
                 className="px-4 py-2 rounded-lg bg-base-800 hover:bg-base-700 text-sm transition"
               >
                 Skip for now

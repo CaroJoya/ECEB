@@ -4,14 +4,28 @@ import { SEED_USERS } from './seed-data';
 import type { User } from '@/types';
 
 const CURRENT_USER_KEY = 'currentUserId';
+const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365;
+
+function writeCookie(userId: string) {
+  if (typeof document === 'undefined') return;
+  const secure =
+    typeof window !== 'undefined' && window.location.protocol === 'https:'
+      ? '; Secure'
+      : '';
+  document.cookie = `${CURRENT_USER_KEY}=${encodeURIComponent(
+    userId
+  )}; path=/; max-age=${ONE_YEAR_SECONDS}; samesite=lax${secure}`;
+}
+
+function clearCookie() {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${CURRENT_USER_KEY}=; path=/; max-age=0; samesite=lax`;
+}
 
 export function getCurrentUserId(): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    return (
-      localStorage.getItem(CURRENT_USER_KEY) ||
-      getCookie(CURRENT_USER_KEY)
-    );
+    return localStorage.getItem(CURRENT_USER_KEY) || getCookie(CURRENT_USER_KEY);
   } catch {
     return null;
   }
@@ -20,11 +34,9 @@ export function getCurrentUserId(): string | null {
 export function setCurrentUserId(userId: string): void {
   if (typeof window === 'undefined') return;
   try {
+    // Cookie first so middleware / SSR are in sync immediately.
+    writeCookie(userId);
     localStorage.setItem(CURRENT_USER_KEY, userId);
-    // Also set a cookie so middleware can read it
-    document.cookie = `${CURRENT_USER_KEY}=${encodeURIComponent(
-      userId
-    )}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`;
     console.log('[Demo] Using simulated auth for', userId);
   } catch (e) {
     console.warn('[Demo] Could not persist current user', e);
@@ -34,8 +46,8 @@ export function setCurrentUserId(userId: string): void {
 export function clearCurrentUserId(): void {
   if (typeof window === 'undefined') return;
   try {
+    clearCookie();
     localStorage.removeItem(CURRENT_USER_KEY);
-    document.cookie = `${CURRENT_USER_KEY}=; path=/; max-age=0; samesite=lax`;
   } catch {
     /* noop */
   }

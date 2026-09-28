@@ -11,9 +11,22 @@ const PROTECTED = [
   '/collaborate',
 ];
 
+// Pages that a signed-in user should never see — bounce them to the app.
+const AUTH_PAGES = ['/', '/login'];
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const userId = request.cookies.get('currentUserId')?.value;
 
+  // 1. Signed-in users skip marketing / login pages.
+  if (userId && AUTH_PAGES.includes(pathname)) {
+    const url = request.nextUrl.clone();
+    url.pathname = '/discover';
+    url.search = '';
+    return NextResponse.redirect(url);
+  }
+
+  // 2. Protect authenticated routes.
   const needsAuth = PROTECTED.some(
     (p) => pathname === p || pathname.startsWith(p + '/')
   );
@@ -21,7 +34,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const userId = request.cookies.get('currentUserId')?.value;
   if (!userId) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
@@ -34,6 +46,8 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
+    '/',
+    '/login',
     '/dashboard/:path*',
     '/upload/:path*',
     '/chat/:path*',

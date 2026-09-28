@@ -1,8 +1,9 @@
-// src/app/layout.tsx  (REPLACE the earlier version)
+// src/app/layout.tsx
 'use client';
 
 import './globals.css';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useEffect } from 'react';
 import { AppProvider, useApp } from '@/context/AppContext';
 import DemoBadge from '@/components/DemoBadge';
 import Navbar from '@/components/Navbar';
@@ -44,8 +45,13 @@ function ToastContainer() {
 }
 
 function UpgradeModal() {
-  const { isUpgradeOpen, upgradeFeature, hideUpgradeModal, showPaymentModal, currentUser } =
-    useApp();
+  const {
+    isUpgradeOpen,
+    upgradeFeature,
+    hideUpgradeModal,
+    showPaymentModal,
+    currentUser,
+  } = useApp();
   if (!isUpgradeOpen) return null;
 
   return (
@@ -96,10 +102,24 @@ function UpgradeModal() {
 
 function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { currentUser } = useApp();
-  const isAuthPage = pathname === '/login';
+  const router = useRouter();
+  const { currentUser, loading } = useApp();
+
+  const isAuthPage = pathname === '/login' || pathname === '/';
   const isLegal = pathname.startsWith('/legal');
   const showSidebar = !!currentUser && !isAuthPage && !isLegal;
+
+  // Role guard: non-admins can't sit on /admin after an account switch.
+  useEffect(() => {
+    if (loading) return;
+    if (
+      pathname.startsWith('/admin') &&
+      currentUser &&
+      currentUser.plan !== 'admin'
+    ) {
+      router.replace('/dashboard');
+    }
+  }, [pathname, currentUser, loading, router]);
 
   return (
     <>
