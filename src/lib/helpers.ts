@@ -106,3 +106,91 @@ export function truncate(str: string, n: number): string {
   if (!str) return '';
   return str.length > n ? str.slice(0, n - 1) + '…' : str;
 }
+
+import type { ConnectionRequest } from '@/types';
+
+// Write a connection request + notify the target user.
+export async function sendConnectionRequest(
+  db: any,
+  fromUserId: string,
+  toUserId: string,
+  fromName: string
+): Promise<void> {
+  if (!db) return;
+  const { ref, set, update } = await import('firebase/database');
+  const reqId = `req_${fromUserId}_${toUserId}`;
+  const now = Date.now();
+
+  // One request record (idempotent — same id every time)
+  await set(ref(db, `connectionRequests/${reqId}`), {
+    id: reqId,
+    from: fromUserId,
+    to: toUserId,
+    status: 'pending',
+    createdAt: now,
+  });
+
+  // Notify the target
+  const notifId = `notif_${now}_${Math.random().toString(36).slice(2, 8)}`;
+  await update(ref(db, `notifications/${toUserId}/${notifId}`), {
+    id: notifId,
+    type: 'connection_request',
+    title: 'New connection request',
+    message: `${fromName} wants to connect.`,
+    link: '/notifications',
+    read: false,
+    createdAt: now,
+    meta: { requestId: reqId, fromUserId },
+  });
+}
+
+// Accept a pending request — writes connection on both sides + notifies sender.
+export async function acceptConnectionRequest(
+  db: any,
+  requestId: string,
+  fromUserId: string,
+  toUserId: string,
+  toName: string
+): Promise<void> {
+  if (!db) return;
+  const { ref, update } = await import('firebase/database');
+  const now = Date.now();
+
+  await update(ref(db, `connectionRequests/${requestId}`), {
+    status: 'accepted',
+  });
+
+  // Bidirectional connection records
+  await update(ref(db, `connections/${fromUserId}/${toUserId}`), {
+    userId: toUserId,
+    connectedAt: now,
+  });
+  await update(ref(db, `connections/${toUserId}/${fromUserId}`), {
+    userId: fromUserId,
+    connectedAt: now,
+  });
+
+  // Notify the original sender
+  const notifId = `notif_${now}_${Math.random().toString(36).slice(2, 8)}`;
+  await update(ref(db, `notifications/${fromUserId}/${notifId}`), {
+    id: notifId,
+    type: 'connection_accepted',
+    title: 'Connection accepted ✅',
+    message: `${toName} accepted your request.`,
+    link: '/chat',
+    read: false,
+    createdAt: now,
+  });
+}
+
+// Decline a pending request.
+export async function declineConnectionRequest(
+  db: any,
+  requestId: string
+): Promise<void> {
+  if (!db) return;
+  const { ref, update } = await import('firebase/database');
+  await update(ref(db, `connectionRequests/${requestId}`), {
+    status: 'declined',
+  });
+}

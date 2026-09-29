@@ -124,12 +124,21 @@ export interface Promotion {
 
 export interface AppNotification {
   id: string;
-  type: 'message' | 'payment' | 'collab' | 'review' | 'system' | 'promo';
+  type:
+    | 'message'
+    | 'payment'
+    | 'collab'
+    | 'review'
+    | 'system'
+    | 'promo'
+    | 'connection_request'
+    | 'connection_accepted';
   title: string;
   message: string;
   link?: string;
   read: boolean;
   createdAt: number;
+  meta?: Record<string, unknown>;
 }
 
 export interface Dispute {
@@ -148,4 +157,17 @@ export interface Toast {
   id: string;
   message: string;
   type: ToastType;
+}
+
+export interface ConnectionRequest {
+  id: string;
+  from: string;
+  to: string;
+  status: 'pending' | 'accepted' | 'declined';
+  createdAt: number;
+}
+
+export interface Connection {
+  userId: string;
+  connectedAt: number;
 }

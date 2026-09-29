@@ -9,13 +9,7 @@ import React, {
   useMemo,
   ReactNode,
 } from 'react';
-import {
-  onValue,
-  ref,
-  update,
-  remove,
-  set,
-} from 'firebase/database';
+import { onValue, ref, update, remove, set } from 'firebase/database';
 import { db } from '@/lib/firebase';
 import { SEED_USERS, SEED_NOTIFICATIONS } from '@/lib/seed-data';
 import {
@@ -203,17 +197,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     async (id: string) => {
       if (!currentUserId) return;
 
-      // Optimistic update
       setNotifications((prev) =>
         prev.map((n) => (n.id === id ? { ...n, read: true } : n))
       );
 
       if (!db) return;
       try {
-        await update(
-          ref(db, `notifications/${currentUserId}/${id}`),
-          { read: true }
-        );
+        await update(ref(db, `notifications/${currentUserId}/${id}`), {
+          read: true,
+        });
       } catch (e) {
         console.warn('[AppContext] markNotificationRead failed', e);
       }
@@ -224,7 +216,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const markAllNotificationsRead = useCallback(async () => {
     if (!currentUserId) return;
 
-    // Optimistic update
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
 
     if (!db) return;
@@ -234,10 +225,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (!n.read) updates[`${n.id}/read`] = true;
       });
       if (Object.keys(updates).length) {
-        await update(
-          ref(db, `notifications/${currentUserId}`),
-          updates
-        );
+        await update(ref(db, `notifications/${currentUserId}`), updates);
       }
     } catch (e) {
       console.warn('[AppContext] markAllNotificationsRead failed', e);
@@ -247,7 +235,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const clearNotifications = useCallback(async () => {
     if (!currentUserId) return;
 
-    // Optimistic update
     setNotifications([]);
 
     if (!db) return;
@@ -276,10 +263,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         return;
       }
       try {
-        await set(
-          ref(db, `notifications/${currentUserId}/${full.id}`),
-          full
-        );
+        await set(ref(db, `notifications/${currentUserId}/${full.id}`), full);
       } catch (e) {
         console.warn('[AppContext] addNotification failed', e);
       }

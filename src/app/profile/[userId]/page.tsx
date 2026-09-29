@@ -12,6 +12,7 @@ import {
   MessageCircle,
   Music,
   TrendingUp,
+  Clock,
 } from 'lucide-react';
 import { useApp } from '@/context/AppContext';
 import { db } from '@/lib/firebase';
@@ -23,6 +24,7 @@ import {
   getPlanBadgeColor,
   planLabel,
   timeAgo,
+  sendConnectionRequest,
 } from '@/lib/helpers';
 import { SEED_USERS, SEED_TRACKS, SEED_REVIEWS } from '@/lib/seed-data';
 
@@ -40,11 +42,13 @@ export default function ProfilePage({ params }: Props) {
     if (!db) return;
     const tUnsub = onValue(ref(db, 'tracks'), (snap) => {
       const val = snap.val();
-      if (val && typeof val === 'object') setTracks(Object.values(val) as Track[]);
+      if (val && typeof val === 'object')
+        setTracks(Object.values(val) as Track[]);
     });
     const rUnsub = onValue(ref(db, 'reviews'), (snap) => {
       const val = snap.val();
-      if (val && typeof val === 'object') setReviews(Object.values(val) as Review[]);
+      if (val && typeof val === 'object')
+        setReviews(Object.values(val) as Review[]);
     });
     return () => {
       tUnsub();
@@ -53,7 +57,9 @@ export default function ProfilePage({ params }: Props) {
   }, []);
 
   const user: User | undefined = useMemo(
-    () => allUsers.find((u) => u.id === userId) || SEED_USERS.find((u) => u.id === userId),
+    () =>
+      allUsers.find((u) => u.id === userId) ||
+      SEED_USERS.find((u) => u.id === userId),
     [allUsers, userId]
   );
 
@@ -126,7 +132,10 @@ export default function ProfilePage({ params }: Props) {
                 <MapPin className="w-3.5 h-3.5" /> {user.location}
               </span>
               <span className="flex items-center gap-1">
-                <Star className="w-3.5 h-3.5 text-warning" fill="currentColor" />
+                <Star
+                  className="w-3.5 h-3.5 text-warning"
+                  fill="currentColor"
+                />
                 {user.rating.toFixed(1)} ({userReviews.length} reviews)
               </span>
               <span className="flex items-center gap-1">
@@ -135,20 +144,11 @@ export default function ProfilePage({ params }: Props) {
             </div>
 
             {!isMe && (
-              <div className="flex items-center gap-2 mt-4">
-                <button
-                  onClick={() => toast('Connection request sent ✨', 'success')}
-                  className="inline-flex items-center gap-1.5 bg-accent hover:bg-accent-light text-black font-semibold text-sm px-4 py-2 rounded-lg transition"
-                >
-                  <UserPlus className="w-4 h-4" /> Connect
-                </button>
-                <Link
-                  href="/chat"
-                  className="inline-flex items-center gap-1.5 bg-base-800 hover:bg-base-700 text-sm px-4 py-2 rounded-lg transition"
-                >
-                  <MessageCircle className="w-4 h-4" /> Message
-                </Link>
-              </div>
+              <ProfileConnectActions
+                currentUser={currentUser}
+                targetUser={user}
+                onToast={toast}
+              />
             )}
           </div>
         </div>
@@ -229,7 +229,10 @@ export default function ProfilePage({ params }: Props) {
                   <div className="flex items-center gap-3 mb-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={reviewer?.avatar || 'https://ui-avatars.com/api/?name=U'}
+                      src={
+                        reviewer?.avatar ||
+                        'https://ui-avatars.com/api/?name=U'
+                      }
                       alt={reviewer?.name || 'User'}
                       className="w-8 h-8 rounded-full border border-base-700"
                     />
@@ -261,6 +264,106 @@ export default function ProfilePage({ params }: Props) {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ---- Profile connect actions with live state ----
+function ProfileConnectActions({
+  currentUser,
+  targetUser,
+  onToast,
+}: {
+  currentUser: User | null;
+  targetUser: User;
+  onToast: (msg: string, type?: 'success' | 'error' | 'info') => void;
+}) {
+  const [state, setState] = useState<'none' | 'pending' | 'connected'>('none');
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+  if (!db || !currentUser) return;
+
+  // Narrow for TS — survives into nested closures
+  const database = db;
+  const myId = currentUser.id;
+  const theirId = targetUser.id;
+
+  let innerUnsub: (() => void) | null = null;
+
+  const connRef = ref(database, `connections/${myId}/${theirId}`);
+  const connUnsub = onValue(connRef, (snap) => {
+    if (snap.val()) {
+      setState('connected');
+      return;
+    }
+    // Not connected — check pending request
+    const reqRef = ref(
+      database,
+      `connectionRequests/req_${myId}_${theirId}`
+    );
+    const rUnsub = onValue(reqRef, (rSnap) => {
+      const r = rSnap.val();
+      if (r?.status === 'pending') setState('pending');
+      else setState('none');
+    });
+    innerUnsub = rUnsub;
+  });
+
+  return () => {
+    connUnsub();
+    if (innerUnsub) innerUnsub();
+  };
+}, [currentUser, targetUser.id]);
+
+  async function handleRequest() {
+    if (!currentUser || busy) return;
+    setBusy(true);
+    try {
+      await sendConnectionRequest(
+        db,
+        currentUser.id,
+        targetUser.id,
+        currentUser.name
+      );
+      setState('pending');
+      onToast(`Request sent to ${targetUser.name} ✨`, 'success');
+    } catch (e) {
+      console.warn(e);
+      onToast('Could not send request', 'error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2 mt-4 flex-wrap">
+      {state === 'connected' && (
+        <span className="inline-flex items-center gap-1.5 bg-accent/10 text-accent border border-accent/40 font-semibold text-sm px-4 py-2 rounded-lg">
+          <Check className="w-4 h-4" /> Connected
+        </span>
+      )}
+      {state === 'pending' && (
+        <span className="inline-flex items-center gap-1.5 bg-warning/10 text-warning border border-warning/40 font-semibold text-sm px-4 py-2 rounded-lg">
+          <Clock className="w-4 h-4" /> Requested
+        </span>
+      )}
+      {state === 'none' && (
+        <button
+          onClick={handleRequest}
+          disabled={busy}
+          className="inline-flex items-center gap-1.5 bg-accent hover:bg-accent-light text-black font-semibold text-sm px-4 py-2 rounded-lg transition disabled:opacity-50"
+        >
+          <UserPlus className="w-4 h-4" />
+          {busy ? 'Sending...' : 'Connect'}
+        </button>
+      )}
+      <Link
+        href="/chat"
+        className="inline-flex items-center gap-1.5 bg-base-800 hover:bg-base-700 text-sm px-4 py-2 rounded-lg transition"
+      >
+        <MessageCircle className="w-4 h-4" /> Message
+      </Link>
     </div>
   );
 }
